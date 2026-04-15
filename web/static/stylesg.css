@@ -1,6 +1,6 @@
 body {
     font-family: Arial, sans-serif;
-    background-color: #f4f4f4;
+    background-color: darkgrey;
     margin: 3px;
 }
 
@@ -30,12 +30,12 @@ body {
 
 .tab-content {
     display: none;
-    padding: 2px;
-    background-color: white;
+    padding: 1px;
+    background-color: darkgray;
     border: 1px solid #4CAF50;
     border-radius: 5px;
     margin-top: 2px;
-    width: 99%;
+    width: 99.5%;
     overflow-y:auto;
 }
 
@@ -107,7 +107,7 @@ body {
     border-radius: 5px;
     vertical-align:auto;
     justify-content: space-between;
-    padding-top: 4px;
+    padding-top: 5px;
     padding-left: 2px;
 }
 
@@ -137,17 +137,17 @@ table {
 }
 
 tr {
-    background-color: #f2f2f2;
+    background-color: darkgray;
     border-radius: 5px;
 }
 
 tr:hover {
-    background-color: #ddd;
+    background-color: #ddddddbb;
 }
 
 th {
     background-color: #4CAF50;
-    color: white;
+    color: rgba(255, 255, 255, 0.789);
     padding: 3px;
     text-align: center;
     border: 1px solid #ddd;
@@ -157,12 +157,12 @@ th {
 td {
     padding: 3px;
     text-align: center;
-    border: 1px solid #ddd;
+    border: 1px solid lightgray;
 }
 
 button {
     background-color: #4CAF50;
-    color: white;
+    color: rgba(255, 255, 255, 0.771);
     padding: 4px 4px;
     border: none;
     border-radius: 5px;
@@ -235,13 +235,13 @@ button:disabled {
 }
 
 select {
-    height: 20px;
+    height: 22px;
     padding: 2px;
     border: 1px solid #4CAF50;
     border-radius: 4px;
-    background-color: #e8f5e9;
+    background-color: rgba(245, 245, 245, 0.543);
     color: #2e7d32;
-    font-size: 12px;
+    font-size: 13px;
     transition: border-color 0.3s;
 }
 
