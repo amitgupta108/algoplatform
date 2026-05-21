@@ -50,23 +50,18 @@ function setQDeltaStrikesCharts(ceStrike, peStrike, oExpiry)
   optionsChartConfig.push(chartConfigItem);
 }
 
-function symtoinstrument(symbol)
+function expandSymbol(symbol)
 {
-  var stk = symbol.slice(-9, -2);
-  var digit5 = Number.isFinite(Number(stk));
-  var strike = digit5 ? stk.slice(2, 7) : stk.slice(3, 7);
-  var expiry = digit5 ? symbol.slice(-14, -7) : symbol.slice(-13, -6);
-  var stockCode = digit5 ? symbol.slice(0, -14) : symbol.slice(0, -13);
+    const regex = /[0-9]/;
+    const idx = symbol.search(regex);
+    const s = {};
+    s.stockCode = idx === -1 ? symbol : symbol.slice(0, idx);
 
-  var instrument = {
-    stockCode: stockCode,
-    expiry: expiry,
-    strike: strike,
-    right: symbol.slice(-2),
-    name: expiry + ' ' + strike + ' ' + symbol.slice(-2)
-  };
-
-  return instrument;
+    s.right = symbol.slice(-2) === 'CE' ? 'Call' : 'Put';
+    s.expiry_date = symbol.slice(idx, idx + 7);
+    s.strike_price = symbol.slice(idx + 7, -2);
+    s.name = s.expiry_date + ' ' + s.strike_price + ' ' + s.right;
+    return s;
 }
 
 function generateEvent(type, nv)

@@ -8,7 +8,8 @@ function addIVNDelta(q, uq)
 {
     if(q !== undefined && uq !== undefined)
     {    
-        var e = q.expiry_date.slice(0, 2).concat('-').concat(q.expiry_date.slice(2, 5)).concat('-20').concat(q.expiry_date.slice(5));
+        const [d, m, y] = [q.expiry_date.slice(0,2), q.expiry_date.slice(2,5), q.expiry_date.slice(5)];
+        const e = `${d}-${m}-20${y}`;
         
         const yearsToExpiry = ((new Date((e).concat(', 15:30'))).getTime() - q.ltt)/(1000*60*60*24*365);
         const flag = q.right === 'Call' ? 'c' : 'p';
@@ -20,7 +21,7 @@ function addIVNDelta(q, uq)
             q.iv = Math.round(iv*10000)/100;
             q.delta = Math.round(delta*10000)/100;
         } catch(error) {
-            console.log(error);
+            console.log(error.message);
             q.iv = 0;
             q.delta = q.right === 'Call' ? 1 : -1;
         }
@@ -71,13 +72,13 @@ function filter(collection, fO)
         if (fO.symbol != undefined)
             k = fO.symbol.includes(element.symbol);
 
-        if (fO.uid != undefined)
-            l = fO.uid.includes(element.uid);
+        if (fO.appid != undefined)
+            l = fO.appid.includes(element.appid);
 
         if (fO.speed != undefined)
             m = fO.speed.includes(element.speed);
 
-        return a && b && c && d && e && f && g && h && j && k && l & m;
+        return a && b && c && d && e && f && g && h && j && k && l && m;
     });
     return fResults;
 }

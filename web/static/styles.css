@@ -20,7 +20,6 @@ body {
     display:block;
     border: 1px solid #4CAF50;
     height: 99.4%;
-    width: 49.4%;
     border-radius: 5px;
     min-width: 600px;
 }  
@@ -33,6 +32,7 @@ body {
     align-items: center;
     justify-content:center;
     font-size: 14px;
+    gap: 6px;
 }
 
 .tab-content {

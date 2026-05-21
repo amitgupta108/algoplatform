@@ -1,38 +1,42 @@
-import qserver from './quotes.mjs'; 
-import wsOps from './broker/brokerws.mjs';
-import iBreeze from './broker/breeze.mjs';
+import kotak_socket from './broker/brokerws.mjs';
+import hist_service from './broker/breeze.mjs';
+import live_kotak from './broker/kotakneo.mjs';
+import live_kotak_neo from './broker/kotakneo-api.mjs';
+import live_icici from './broker/breeze.mjs';
+import paper_trading from './broker/breeze.mjs';
+import Session from './session/session.mjs';
 
-var iKNeo;
+/* mode
+0: historical backtest
+1: live kotak-openalgo data, kotak-neo-api orders
+2: live kotak-openalgo data, orders simulated
+3: live kotak-openalgo data and orders submission openalgo orderconf kotakws
+4: live icici data and kotak-openalgo orders
+*/
 
-async function getBrokerService(mode) 
-{ 
-    if(mode === 1) {
-        var server = await import('./broker/kotakneo.mjs');
-        iKNeo = server.default;
-        return iKNeo;
-    }
-}
-
-async function handleMessage(sn, event, msg)
+async function handleMessage(s, appid, event, msg)
 {
     try {
-        const bserver = sn.mode === 0 ? iBreeze : await getBrokerService(sn.mode);
+        const sn = s.sn;
+        const market_service = sn.mode === 0 ? hist_service : sn.mode === 1 ? live_kotak : live_kotak_neo;
+        const trading_service  = sn.mode === 1 ?  live_kotak: live_kotak_neo;
+        
         switch(event)
         {
             case 'start':
                     if(sn.mode === 0)
-                        bserver.init(sn.uid, msg.simStartTime, '1x');
+                        market_service.init(sn.appid, msg.simStartTime, '1x');
 
                     const stSubs = sn.inqsub(msg, (opSubs) => {
-                        bserver.subscribe(sn.uid, opSubs, 'subs');
+                        market_service.subscribe(sn.appid, opSubs, 'subs');
                     });
-                    bserver.subscribe(sn.uid, stSubs, 'subs');
+                    market_service.subscribe(sn.appid, stSubs, 'subs');
                 break;
             case 'preData':
                 console.log("Pre data request " + new Date(msg.startTime));
 
-                var prefq = iBreeze.preF(sn.uid, sn.stockCode, msg);
-                emit(sn.uid, "futuresPreData", await prefq);
+                var prefq = await hist_service.preF(appid, sn.stockCode, msg);
+                s.emit("futuresPreData", prefq);
 
                 /*var preUq = iBreeze.preU(msg);
                 var uq = await preUq;
@@ -41,32 +45,36 @@ async function handleMessage(sn, event, msg)
                 //emit(sn.s, "qdeltastrikes", uq, pq, cq);*/
                 break;
             case 'speed':
-                iBreeze.changeSpeed(sn.uid, msg);
+                if(sn.mode === 0)
+                    hist_service.changeSpeed(appid, msg);
                 break;
             case 'stop':
-                bserver.subscribe(sn.uid, sn.unsuball(), 'unsuball');
+                market_service.subscribe(appid, sn.unsuball(appid), 'unsuball');
                 break;
             case 'prevsession':
-                emit('prevsession', sn.status !== undefined)
+                s.emit('prevsession', sn.status)
             break;
-            case 'ocnxt':
-                sn.runOCNxt('start');
+            case 'option_chain':
+                sn.option_chain(msg.key, msg.action);
                 break
             case 'order':
-                var orsub = await bserver.order(sn.uid, msg);
+                var orsub = await trading_service.order(appid, msg);
+                break;
+            case 'modifyorder':
+                var mres = await trading_service.modifyorder(appid, msg);
                 break;
             case 'cancelorder':
-                await bserver.cancelorder(sn.uid, msg);
+                await trading_service.cancelorder(appid, msg);
                 break;
             case 'orderbook':
-                var response = await bserver.orderbook(sn.uid, msg);
-                emit(sn.uid, event, response);
+                var response = await trading_service.orderbook(appid, msg);
+                s.emit(event, response);
                 break;
             case 'wsOps':
-                if(msg.action === 'live')
-                    var response = bserver.unlockLiveOrders(msg.data);
+                if(msg.action === 'unlock_live')
+                    var response = live_kotak.unlockLiveOrders(msg.data);
                 else
-                    var response = await wsOps(msg.action, msg.data);
+                    var response = await kotak_socket.wsOps(msg.action, msg.data);
                 console.log("wsOps response: " + msg.action + ' ' + response);
                 break;
             default:
@@ -77,15 +85,17 @@ async function handleMessage(sn, event, msg)
     }
 }
 
-function emit(uid, event, msg){
-    qserver.emit(uid, event, msg);
-}
-
-function exit(sn)
+async function exit(appid)
 {
-    iBreeze.exit(sn.uid);
-    if(sn.mode === 1)
-        iKNeo.exit(sn.uid, sn.unsuball());
+    const sn = Session.sn(appid);
+    if(sn === undefined)
+        return;
+    
+    if(sn.mode === 0)
+        hist_service.exit(appid);
+    else
+        if(sn.shared_with.size === 2)
+            live_kotak.exit(appid);
 }
 
 export default {

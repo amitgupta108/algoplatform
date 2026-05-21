@@ -8,11 +8,12 @@ const order_list_tbody = document.getElementById('order-list-tbody');
 const order_list_thead = document.getElementById('order-list-thead');
 const order_rows_tbody = document.getElementById('tbody-order-panel');
 const positions_tBody = document.getElementById('positions_tbody');
+const orderlist_row_overlay = document.getElementById('orderlist-row-overlay');
 
 const t_order_list_row = document.getElementById('order-list-row');
-const t_order_window_row = document.querySelector('#order-window-row');
-const t_position_table_row = document.querySelector('#position-table-row');
-const t_option_chain_header = document.querySelector('#oc-head-row');
+const t_order_window_row = document.getElementById('order-window-row');
+const t_position_table_row = document.getElementById('position-table-row');
+const t_option_chain_header = document.getElementById('oc-head-row');
 const t_option_chain_row = document.getElementById('option-chain-row');
 
 const toggle = document.getElementById('toggleBasket');
@@ -20,12 +21,20 @@ const pos_all_cb = document.getElementById('exit_all_cb');
 const exit_pos_btn = document.getElementById('exitPositionBtn');
 const closeOWinBtn = document.getElementById('ow_close_btn');
 
-var expiry_label = document.getElementById('oc_expiry_lb');
+const socn = document.getElementById('socn');
+const date_label = document.getElementById('timer_date_lb');
+const time_label = document.getElementById('timer_time_lb');
+const spot_label = document.getElementById('timer_spot_lb');
+const latency_label = document.getElementById('timer_latency_lb');
+const expiry_label = document.getElementById('oc_expiry_lb');
+const simDate = new Date(instrument.simStartTime).toDateString();
+
+date_label.innerText = simDate;
 expiry_label.innerText = instrument.oExpiry;
 
-var total_booked =  document.getElementById("vBookedPL");
-var total_unbooked =  document.getElementById("vUnbookedPL");
-var total_pnl =  document.getElementById("vTotalPL");
+var gtotal_booked =  document.getElementById("vBookedPL");
+var gtotal_unbooked =  document.getElementById("vUnbookedPL");
+var gtotal_pnl =  document.getElementById("vTotalPL");
 /*--Custom Tags------------------------------------------------------------------------------------------------------------------------------*/
 class TradeButtons extends HTMLElement {
   connectedCallback() {
@@ -68,7 +77,7 @@ qBox.addEventListener('strikex', (event) =>
 });
 
 pos_all_cb.onchange = (event) => {
-  var checkboxes = document.querySelectorAll(`input[type="checkbox"]#${pos_exit_cb}:not(:disabled)`);
+  var checkboxes = positions_tBody.querySelectorAll(`input[type="checkbox"]:not(:disabled)`);
   checkboxes.forEach(cb => cb.checked = pos_all_cb.checked);
 
   exit_pos_btn.style.display = pos_all_cb.checked ? 'block' : 'none';

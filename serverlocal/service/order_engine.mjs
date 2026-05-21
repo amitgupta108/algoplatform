@@ -1,117 +1,159 @@
-import qserver from '../quotes.mjs';
-import utils from '../../common/utils.mjs';
-import adapter from '../adapter/histadapter.mjs';
-
+import { execFileSync } from 'node:child_process';
 import EventEmitter from 'node:events';
-const wsServer = new EventEmitter();
-wsServer.setMaxListeners(1);
-wsServer.addListener('message', qserver.emitUpdates);
+const OrderNotifier = new EventEmitter();
+OrderNotifier.setMaxListeners(1);
 
-var listener = false;
-const order_map = new Map();
+const mode_kotak_live = 1;
+const sim_order_map = new Map();
+const live_order_map = new Map();
+var counter = 50000;
+
+function addOrderUpdateListener(callback)
+{
+    OrderNotifier.addListener('order', callback);
+}
 
 function neworders(orders)
 {
-    if(!listener)
-        adapter.addListener('strikex', orderExecution);
-
     orders.forEach((order) => {
-        
-        order_map.set(order.orderid, order);
-        order.state = 'opened';
+    
+        order.filled_q = 0;
+        order.pricedAt = 0;
+        order.orderid = ++counter;
+        if(order.mode === 'live') {
+            order.localid = order.orderid;
+            live_order_map.set(order.orderid, order);
+        } else {
+            order.state = 'opened';
+            sim_order_map.set(order.orderid, order);
+        }
+
         if(order.mode !== 'live')
-            wsServer.emit('message', order.appid, {type: 'order', data: order});
+            OrderNotifier.emit('order', order.appid, 'order', order);
     });
 }
 
-function liveOrderMatching(message)
+function liveOrderMatching(message, mode)
 {
-    var live_order = message.data;
-    var order = order_map.get(live_order.orderid);
-    if(order !== undefined)
+    if(!['open', 'complete', 'rejected', 'cancelled'].includes(message.data.ordSt))
+        return;
+
+    /*
+        1. externally placed order - no orderid
+        2. app triggered order with orderid available
+        3. app triggered order with orderid not yet available
+    */
+    const live_order = formatLiveOrder(message.data, false);
+    var found = Array.from(live_order_map.values()).find((order) => {
+        return (order.orderid === live_order.orderid)
+                || (order.stockCode === live_order.stockCode
+                && order.action === live_order.action
+                && order.pricetype === live_order.pricetype
+                && order.quantity === live_order.quantity
+                && order.quantity >= live_order.filled_q
+                && order.symbol === live_order.symbol); 
+    });
+
+    if(found !== undefined)
     {
-        order = standardizeO(order);
-        order.state = ex_order.state;
-        order.time_matched = Date.now();
-        wsServer.emit('message', order.appid, {type: 'order', data: order});
+        live_order.appid = found.appid;
+        if(found.orderid === found.localid) //orderid matched - update existing order
+            live_order_map.delete(found.orderid);
     }
     else
-    {
-        qserver.broadcast({type: 'order', data: order});
-    }
+        live_order.appid = live_order.stockCode + mode;
+    
+    console.log('live order matching status: ' + live_order.appid);
+    live_order_map.set(live_order.orderid, live_order);
+
+    OrderNotifier.emit('order', live_order.appid, 'order', live_order);
 }
 
-function orderExecution(q)
+function orderExecutionSim(q)
 {
-    listener = true;
-    const openorders = order_map.values().toArray().filter((odr) => {
-        return (odr.state === 'opened'
-        && odr.symbol === q.symbol
-        && odr.mode !== 'live');
+    const openorders = Array.from(sim_order_map.values()).filter((order) => {
+        return (order.state === 'opened'
+            && order.symbol === q.symbol
+            && order.mode !== 'live');
     });
     
-    openorders.forEach((o) => {
+    if(openorders.length === 0)
+        return;
+
+    openorders.forEach((order) => {
         var executed = false;
-        if(o.pricetype === 'MARKET')
+        if(order.pricetype === 'MARKET')
             executed = true;
-        else if(o.pricetype === 'LIMIT')
-            if(o.action === 'BUY' && q.close <= o.price)
+        else if(order.pricetype === 'LIMIT')
+            if(order.action === 'BUY' && q.ltp <= order.price)
                 executed = true;
-            else if(o.action === 'SELL' && q.close >= o.price)
+            else if(order.action === 'SELL' && q.ltp >= order.price)
                 executed = true;
         
         if(executed) {
-            o.state = 'completed';
-            o.pricedAt = q.close;
-            o.filled_q = o.quantity;
-            wsServer.emit('message', o.appid, {type: 'order', data: o});
+            order.state = 'completed';
+            order.pricedAt = q.ltp;
+            order.filled_q = order.quantity;
+            OrderNotifier.emit('order', order.appid, 'order', order);
         }
     });
 }
 
-function standardizeO(order)
+function formatLiveOrder(order, insert = false)
 {
-    const {nOrdNo: orderid, ordSt: state, avgPrc: pricedAt, prc: price, prod: product, sym: stockCode,
+    var {nOrdNo: orderid, ordSt: state, avgPrc: pricedAt, prc: price, prod: product, sym: stockCode, trdSym: symbol, 
             expDt: expiry_date, stkPrc: strike_price, optTp: right, trnsTp: action, fldQty: filled_q, unFldSz: unfilled_q,
-            qty: quantity, prcTp: pricetype, ...rest} = order;
+            qty: quantity, prcTp: pricetype, strategyCode: _appid, ordSrc: source, ...rest} = order;
 
-    var uOrder = {orderid, state, pricedAt, price, product, stockCode, expiry_date, strike_price, right, action,
-                        filled_q, unfilled_q, quantity, pricetype, ...rest};
+    var fOrder = {orderid, state, pricedAt, price, product, stockCode, symbol, expiry_date, strike_price, right, action,
+                        filled_q, unfilled_q, quantity, pricetype, _appid, source, ...rest};
     
-    if(uOrder.state === 'open')
-        uOrder.state = 'opened';
+    if(fOrder.state === 'open') {
+        fOrder.state = 'opened';
+        filled_q = 0;
+    }
+    else if(fOrder.state === 'complete')
+        fOrder.state = 'completed';
     
-    uOrder.action = uOrder.action === 'B' ? 'BUY' : 'SELL';
-    uOrder.expiry_date = uOrder.expiry_date.replaceAll(', 20', '').replaceAll(' ', '').toUpperCase();
-    uOrder.strike_price = uOrder.strike_price.replace('.00', '');
-    uOrder.symbol = uOrder.stockCode + uOrder.expiry_date +  uOrder.strike_price + uOrder.right;
+    fOrder.pricetype = fOrder.pricetype === 'L' ? 'LIMIT' : 'MARKET';
+    fOrder.action = fOrder.action === 'B' ? 'BUY' : 'SELL';
+    fOrder.expiry_date = fOrder.expiry_date.replaceAll(', 20', '').replaceAll(' ', '').toUpperCase();
+    fOrder.strike_price = fOrder.strike_price.replace('.00', '');
+    fOrder.symbol = fOrder.stockCode + fOrder.expiry_date +  fOrder.strike_price + fOrder.right;
+    fOrder.mode = 'live';
+    if(insert && !live_order_map.has(fOrder.orderid))
+        live_order_map.set(fOrder.orderid, fOrder);
 
-    return uOrder;
+    return fOrder;
 }
 
 function cancelOrder(order)
 {
-    var found = order_map.get(order.orderid);
-    if(found !== undefined) {
+    var found = sim_order_map.get(order.orderid);
+    if(found !== undefined && found.state === 'opened') {
         found.state = 'cancelled';
         if(found.mode !== 'live')
-            wsServer.emit('message', order.appid, {type: 'order', data: found});
+            OrderNotifier.emit('order', found.appid, 'order', found);
     }
+    else
+        console.error('requested order cancellation failed - order not found or not open');
 }
 
 function orderbook(appid, stockCode)
 {
-    const orders = order_map.values().toArray().filter((o) => {
-        return (o.appid === appid
-        && o.stockCode === stockCode
-        && o.mode !== 'live');
+    return Array.from(sim_order_map.values()).filter((order) => {
+        return (order.appid === appid
+        && order.stockCode === stockCode
+        && order.mode !== 'live');
     });
-    return orders;
 }
 
 export default {
     neworders,
     cancelOrder,
     orderbook,
-    liveOrderMatching
+    liveOrderMatching,
+    addOrderUpdateListener,
+    orderExecutionSim,
+    formatLiveOrder
 }
