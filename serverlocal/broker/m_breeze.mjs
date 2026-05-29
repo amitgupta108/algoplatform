@@ -1,8 +1,8 @@
 import adapter from '../adapter/histadapter.mjs';
-import Order_Service from '../service/order_engine.mjs';
+import Order_Service from '../service/ordersimulator.mjs';
 import qServer from '../quotes.mjs';
 
-const mode_icici_live = 2;
+const mode_live = 1;
 adapter.addQuoteListener(onQuotes);
 
 function init(appid, startTime, speed)
@@ -51,7 +51,7 @@ function onQuotes(q, mode, appid)
     if(appid !== undefined)
         qServer.emitQs(appid, q);
     else
-        qServer.emitQs(q.stockCode + mode_icici_live, q);
+        qServer.emitQs(q.stockCode + mode_live, q);
 
     if(q.key === 'strikex')
         Order_Service.orderExecutionSim(q);
@@ -61,7 +61,8 @@ function standardizeiq(q)
 {
     q['exchange'] = q['exchange_code'];
     q['ltp'] = q['close'];
-    q.ltt = Date.parse(q.datetime);
+    if(q.ltt === undefined)
+        q.ltt = Date.parse(q.datetime);
 
     if(q.exchange != 'NSE')
         q.expiry_date = q.expiry_date.replaceAll('-20', '').replaceAll('-', '');

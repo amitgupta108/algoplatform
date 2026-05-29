@@ -12,7 +12,7 @@ export {findByTime};
 function findByTime(sortedArray, seekElement) {
   // Let's create comparator from the comparatorCallback function.
   // Comparator object will give us common comparison methods like equal() and lessThan().
-  const comparator = new QuoteComparator();
+  const comparator = globalQuoteComparator;
 
   // These two indices will contain current array (sub-array) boundaries.
   let startIndex = 0;
@@ -143,7 +143,7 @@ class QuoteComparator {
    * @returns {number}
    */
   static defaultCompareFunction(q, t) {
-    var qt = Date.parse(q.datetime);
+    var qt = q.ltt;
     if (qt === t) {
       return 0;
     }
@@ -208,3 +208,5 @@ class QuoteComparator {
     this.compare = (a, b) => compareOriginal(b, a);
   }
 }
+
+const globalQuoteComparator = new QuoteComparator();

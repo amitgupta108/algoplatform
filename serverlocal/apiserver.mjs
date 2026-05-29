@@ -1,10 +1,12 @@
-import kotak_socket from './broker/brokerws.mjs';
-import hist_service from './broker/breeze.mjs';
-import live_kotak from './broker/kotakneo.mjs';
-import live_kotak_neo from './broker/kotakneo-api.mjs';
-import live_icici from './broker/breeze.mjs';
-import paper_trading from './broker/breeze.mjs';
+import hist_service from './broker/m_breeze.mjs';
+import live_openalgo from './broker/m_t_openalgo.mjs';
+import live_kotak from './broker/t_kotakneo.mjs';
+import live_icici from './broker/m_breeze.mjs';
+import paper_trading from './broker/m_breeze.mjs';
 import Session from './session/session.mjs';
+import livetradenotifier from './service/livetradenotifier.mjs';
+
+var live_order_locked = true;
 
 /* mode
 0: historical backtest
@@ -18,8 +20,14 @@ async function handleMessage(s, appid, event, msg)
 {
     try {
         const sn = s.sn;
-        const market_service = sn.mode === 0 ? hist_service : sn.mode === 1 ? live_kotak : live_kotak_neo;
-        const trading_service  = sn.mode === 1 ?  live_kotak: live_kotak_neo;
+        const market_service = sn.mode === 0 ? hist_service : sn.mode === 1 ? live_openalgo : live_kotak;
+        const trading_service  = sn.mode === 1 ?  live_openalgo: live_kotak;
+        
+        if(['order', 'modifyorder', 'cancelorder'].includes(event) && sn.mode !== 0 && live_order_locked)
+        {
+            console.log('Live orders are locked');
+            return;
+        }
         
         switch(event)
         {
@@ -37,12 +45,6 @@ async function handleMessage(s, appid, event, msg)
 
                 var prefq = await hist_service.preF(appid, sn.stockCode, msg);
                 s.emit("futuresPreData", prefq);
-
-                /*var preUq = iBreeze.preU(msg);
-                var uq = await preUq;
-                //var preDq = iBreeze.preD(msg, uq[uq.length - 1]);
-                //var pq = await preDq[0]; var cq = await preDq[1];
-                //emit(sn.s, "qdeltastrikes", uq, pq, cq);*/
                 break;
             case 'speed':
                 if(sn.mode === 0)
@@ -72,10 +74,12 @@ async function handleMessage(s, appid, event, msg)
                 break;
             case 'wsOps':
                 if(msg.action === 'unlock_live')
-                    var response = live_kotak.unlockLiveOrders(msg.data);
+                    unlockLiveOrders(msg.data);
                 else
-                    var response = await kotak_socket.wsOps(msg.action, msg.data);
-                console.log("wsOps response: " + msg.action + ' ' + response);
+                    if(msg.action === 'connect')
+                        livetradenotifier.connect(msg.data);
+                    else if(msg.action === 'disconnect')
+                        livetradenotifier.disconnect(msg.data);
                 break;
             default:
                 console.log("Unknown event " + event);
@@ -95,7 +99,17 @@ async function exit(appid)
         hist_service.exit(appid);
     else
         if(sn.shared_with.size === 2)
-            live_kotak.exit(appid);
+            live_openalgo.exit(appid);
+}
+
+function unlockLiveOrders(key)
+{
+    const today = new Date();
+    if(key === today.toDateString())
+        live_order_locked = false;
+
+    console.log('live order lock ' + live_order_locked);
+    return (key === today.toDateString());
 }
 
 export default {

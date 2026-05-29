@@ -4,14 +4,21 @@ const require = createRequire(import.meta.url);
 const vollib = require('../../js_vollib-master/build/js_vollib').js_vollib;
 const regex = /Time/;
 
+const expiryTimestampCache = new Map();
+
 function addIVNDelta(q, uq)
 {
     if(q !== undefined && uq !== undefined)
     {    
-        const [d, m, y] = [q.expiry_date.slice(0,2), q.expiry_date.slice(2,5), q.expiry_date.slice(5)];
-        const e = `${d}-${m}-20${y}`;
+        let expiryTime = expiryTimestampCache.get(q.expiry_date);
+        if (expiryTime === undefined) {
+            const [d, m, y] = [q.expiry_date.slice(0,2), q.expiry_date.slice(2,5), q.expiry_date.slice(5)];
+            const e = `${d}-${m}-20${y}`;
+            expiryTime = (new Date((e).concat(', 15:30'))).getTime();
+            expiryTimestampCache.set(q.expiry_date, expiryTime);
+        }
         
-        const yearsToExpiry = ((new Date((e).concat(', 15:30'))).getTime() - q.ltt)/(1000*60*60*24*365);
+        const yearsToExpiry = (expiryTime - q.ltt)/31536000000; // 31536000000 = 1000*60*60*24*365
         const flag = q.right === 'Call' ? 'c' : 'p';
 
         try{
@@ -21,7 +28,7 @@ function addIVNDelta(q, uq)
             q.iv = Math.round(iv*10000)/100;
             q.delta = Math.round(delta*10000)/100;
         } catch(error) {
-            console.log(error.message);
+            console.log('Error occurred while calculating IV and Delta: ' + JSON.stringify(error));
             q.iv = 0;
             q.delta = q.right === 'Call' ? 1 : -1;
         }

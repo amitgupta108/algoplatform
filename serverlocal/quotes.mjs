@@ -1,7 +1,6 @@
 import utils from '../common/utils.mjs';
 import Session from './session/session.mjs';
-import Order_Notifier from '../serverlocal/service/order_engine.mjs';
-Order_Notifier.addOrderUpdateListener(emitOrders);
+
 const socketmap = new Map();
 
 function emitOrders(appid, type, order)
@@ -11,11 +10,15 @@ function emitOrders(appid, type, order)
         if(app_obj !== undefined)
             emit(app_obj.socket, type, order);
         else
-            console.error('Orphan order ' + JSON.stringify(order));
+        {
+            const sn = Session.sn(order.appid);
+            group_emit(sn, type, order);
+        }
     }
     else //externally actioned orders
     {    
-        const sn = Session.sn(order.stockCode);
+        console.error('Orphan order ' + JSON.stringify(order));
+        const sn = Session.sn(order.stockCode); //stockCode search is to be built
         group_emit(sn, type, order);
     }
 }
@@ -34,24 +37,25 @@ function emitQs(appid, q)
     }
 }
 
-function group_emit(sn, type, q)
+function group_emit(sn, type, msg)
 {
-    sn.shared_with.keys().forEach((a) => {
-        const app_obj = socketmap.get(a);
-        emit(app_obj.socket, type, q);
-    });
+    for (const appid of socketmap.keys()) {
+        const app_obj = socketmap.get(appid);
+        if(app_obj && type === 'order')
+            msg.appid = appid;
+        emit(app_obj.socket, type, msg);
+    };
 }
 
 function broadcast(type, msg, group)
 {
-    socketmap.keys().toArray().forEach((appid) => {
+    for (const appid of socketmap.keys()) {
         var app_obj = socketmap.get(appid);
-        
-        if(app_obj.mode !== 0) {
-            if(type === 'hb' || type === 'vix')
+        if (app_obj && app_obj.mode !== 0) {
+            if (type === 'hb' || type === 'vix')
                 emit(app_obj.socket, type, msg);
         }
-    });
+    }
 }
 
 function emit(s, type, msg)

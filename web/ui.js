@@ -1,49 +1,83 @@
-function orderWindow(clBtn, parent)
+function createOrder(btn, parent)
 {
   const symbol = parent.title;
-  const action = clBtn.innerText;
+  const action = btn.innerText;
+  
+  const rows = order_rows_tbody.rows;
 
-  appendOrderRow(new Order(symbol, action), toggle.checked);
+  if(rows.length === 0)
+    appendOrderRow(symbol, action);
+  else if(rows.length > 0)
+  {
+    var idx = Array.from(rows).findIndex((r) => {
+      return r.querySelector('#owsymbol').innerText === symbol;
+    });
+    const r_row = !basket.checked ? 0 : idx;
+    if(r_row !== -1)
+      rows[r_row].remove();
+    
+    appendOrderRow(symbol, action);
+  }
   showOrderWindow();
 }
 
-function appendOrderRow(neworder, isBasket)
+function appendOrderRow(symbol, action, quantity = 1)
 {
-  toggle.disabled = true;    
-  const scripName = expandSymbol(neworder.symbol).name;
+  const scripName = expandSymbol(symbol).name;
 
-  var tr = tRow(t_order_window_row, true);
-  tr.querySelector('#owsymbol').innerText  = neworder.symbol;
+  var tr = tRow(t_order_window_row);
+  tr.querySelector('#owsymbol').innerText  = symbol;
   tr.querySelector('#scripName').innerText  = scripName;
-  tr.querySelector('#lotselect').value = neworder.quantity / instrument.lotsize;
-  tr.querySelector('#ordertype').innerText = neworder.pricetype;
-  
-  const order_row_btn = tr.querySelector('#ow_action_btn');
-  order_row_btn.innerText = neworder.action;
+  tr.querySelector('#lotselect').value = quantity;
 
-  neworder.action === 'B' ? 
-      order_row_btn.classList.replace('sell', 'buy') :
-      order_row_btn.classList.replace('buy', 'sell') ;
+  const action_btn = tr.querySelector('#ow_action_btn');
+  action_btn.innerText = action;
 
-  if(!isBasket) {
-    order_rows_tbody.innerHTML = '';
+  if(!basket.checked)
     tr.classList.remove('hover-row');
+
+  if(action === 'B') {
+    action_btn.classList.replace('sell', 'buy');
+  } else {
+    action_btn.classList.replace('buy', 'sell');
   }
-  order_rows_tbody.prepend(tr); 
+
+  order_rows_tbody.prepend(tr);
+  submitOWinBtn.disabled = true;
 }
 
 function showOrderWindow()
-{
-  var rows = oWindow.querySelectorAll('tr');
-  oWindow.classList.remove('multi', 'buy', 'sell');
-  
-  var wCSS = rows.length > 2 ? 'multi' : rows[0].querySelector("#ow_action_btn").innerText === 'B' ? 'buy' : 'sell';
-  oWindow.classList.add(wCSS);
-  oWindow.style.display = "block";
+{  
+  basket.disabled = true;
+  const rows = order_rows_tbody.rows;
+  if(rows.length > 1)
+  {
+    if(!oWindow.classList.contains('multi'))
+    {
+      oWindow.classList.remove('buy', 'sell');
+      oWindow.classList.add('multi');
+    }
+  }
+  else if(rows.length  === 1)
+  {
+    const action = rows[0].querySelector('#ow_action_btn').innerText;
+    oWindow.classList.remove('buy', 'sell');
+    if(action === 'B') 
+      oWindow.classList.add('buy');
+    else
+      oWindow.classList.add('sell');
+  }
+  if(oWindow.style.display !== "block")
+    oWindow.style.display = "block";
+}
 
-  setTimeout(() => {
-      oWindow.classList.add('show');
-    }, 10);
+function hideOWin()
+{
+  oWindow.style.display = "none";
+  order_rows_tbody.innerHTML = "";
+  basket.disabled = false;
+  submitOWinBtn.disabled = true;
+  in_prep_orders.orders = {};
 }
 
 function flipAction(orderRowBtn, orderRow)
@@ -65,7 +99,7 @@ function switchTabs(evt)
   document.getElementById('n_oc_div').classList.toggle('active');
 }
 
-function tRow(template, withListener){
+function tRow(template, withListener = true){
   const new_row = document.importNode(template.content, true).querySelector('tr');
   if(withListener){
     new_row.addEventListener('click', (e) => {
@@ -85,7 +119,7 @@ function handleRowEvent(e)
   if(cl_el.id === 'ordertype')
     flipOrderType(cl_el, pn_el);
   else if(cl_el.id === 'div_trans_btn')
-    orderWindow(cl_el, pn_el);
+    createOrder(cl_el, pn_el);
   else if(cl_el.id === 'row_attn_btn')
     hl_row(cl_el, pn_el);
   else if(cl_el.id === 'ow_action_btn')
@@ -128,17 +162,9 @@ function removeOrderRow(c, p){
 
 function cancelOrder(c, p_row)
 {
-  const symbol = order_list_thead.rows[0].title;
-  const postn = Position.findPosition(symbol, false);
-  const orderid = Number(p_row.title);
-  const c_order = postn.orders.get(orderid);
-  if(c_order !== undefined && c_order.state === 'opened') {
-    emit('cancelorder', c_order);
-    sOrderSubmit.play();
-      orderlistDiv.style.display = 'none';
-  }
-  else 
-    console.log('open order not found ' + orderid);
+  emit('cancelorder', {orderid: p_row.title});
+  sOrderSubmit.play();
+  orderlistDiv.style.display = 'none';
 }
 
 function confirmCancel(c, p) {

@@ -1,5 +1,5 @@
 import consoleStamp from 'console-stamp';
-consoleStamp(console, { format: ':date(HH:MM:ss)' });
+consoleStamp(console, { format: ':date(HH:MM:ss.l)' });
 
 import { fileURLToPath } from 'node:url';
 import {readFileSync} from 'node:fs';
@@ -11,8 +11,9 @@ const __dirname = path.dirname(__filename);
 import express from 'express';
 import https from 'node:https';
 import { Server } from "socket.io";
+import ScripServer from './service/scripstore.mjs';
 import Session from './session/session.mjs';
-import kotak_socket from './broker/brokerws.mjs';
+import kotak_socket from './broker/tradeupdater.mjs';
 import qserver from './quotes.mjs'; 
 import apiserver from './apiserver.mjs'; 
 import { error } from 'node:console';
@@ -29,12 +30,12 @@ if(!global.server)
         kotak_socket.wsOps('connect', args[3]);
 
     const app = express();
-    app.use(express.static('web/'));
+    app.use(express.static(path.join(__dirname, '..', 'web')));
     app.use(express.json());
 
     const options = {
-        key: readFileSync(path.join(__dirname, 'certs', 'key.pem'), 'utf8'),
-        cert: readFileSync(path.join(__dirname, 'certs', 'cert.pem'), 'utf8'),
+        key: readFileSync(path.join(__dirname, 'config', 'key.pem'), 'utf8'),
+        cert: readFileSync(path.join(__dirname, 'config', 'cert.pem'), 'utf8'),
     };
 
     const httpsServer = https.createServer(options, app);
@@ -55,6 +56,8 @@ if(!global.server)
         pingInterval: 30000,
         pingTimeout: 30000
     });
+
+    ScripServer.start();
 
     io.on('connection', (s) => {
         
